@@ -1,36 +1,67 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 df = pd.read_csv("Cloud Systems Benchmarking AE1 - Sheet1.csv")
 
-# Standard only
-df = df[df["Model"].str.strip().str.lower() == "standard"]
+# --- Filter to standard only ---
+df = df[df["Model"].astype(str).str.strip().str.lower() == "standard"]
 
-x_col = "Machine Type"
+# --- Columns ---
+group_col = "Machine Type"
+vcpu_col = "vCPUs"
 y_col = "CPU Speed (events/sec)"
 
-order = ["e2-standard", "e2-highcpu", "e2-highmem"]
-present = [t for t in order if t in df[x_col].unique()]
-grouped = [df.loc[df[x_col] == t, y_col].dropna().values for t in present]
+# --- Coerce numeric and clean ---
+df[vcpu_col] = pd.to_numeric(df[vcpu_col], errors="coerce")
+df[y_col] = pd.to_numeric(df[y_col], errors="coerce")
+df = df.dropna(subset=[group_col, vcpu_col, y_col])
 
-plt.figure(figsize=(8, 4.8))
-bp = plt.boxplot(grouped, labels=present, showmeans=True, patch_artist=True)
+# --- Only vCPUs 2/4/8 ---
+vcpu_levels = [2, 4, 8]
+df = df[df[vcpu_col].isin(vcpu_levels)]
 
-# Color boxes by machine type
-color_map = {"e2-standard": "tab:blue", "e2-highcpu": "tab:orange", "e2-highmem": "tab:green"}
-for box, inst in zip(bp["boxes"], present):
-    box.set_facecolor(color_map.get(inst, "lightgray"))
-    box.set_alpha(0.6)
+# --- Preferred VM order (includes new types) ---
+preferred_order = [
+    "e2-standard", "e2-highcpu", "e2-highmem",
+    "n4-standard", "c2d-standard"
+]
 
-for median in bp["medians"]:
-    median.set_linewidth(2)
+present_types = sorted(df[group_col].unique().tolist())
 
+# Keep preferred order first, then append any extra machine types found in CSV
+vm_types = [t for t in preferred_order if t in present_types] + \
+           [t for t in present_types if t not in preferred_order]
+
+# --- Median throughput per (VM type, vCPU) ---
+summary = (
+    df.groupby([group_col, vcpu_col])[y_col]
+      .median()
+      .unstack(vcpu_col)
+      .reindex(vm_types)
+      .reindex(columns=vcpu_levels)
+)
+
+# --- Grouped bar plot ---
+x = np.arange(len(vm_types))
+width = 0.24  # slightly narrower to fit more VM types nicely
+
+plt.figure(figsize=(11, 4.8))
+
+for i, v in enumerate(vcpu_levels):
+    vals = summary[v].values
+    plt.bar(x + (i - 1) * width, vals, width=width, label=f"{v} vCPUs")
+
+plt.xticks(x, vm_types, rotation=15, ha="right")
 plt.xlabel("Instance Type")
-plt.ylabel("Events Per Second")
-plt.title("Figure 1: CPU throughput by instance type (standard only)")
+plt.ylabel("Events Per Second (median)")
+plt.title("Figure 1: CPU throughput by instance type and vCPU (standard only)")
+plt.legend(title="VM size")
 
-plt.gca().set_axisbelow(True)
-plt.grid(axis="y", alpha=0.5)  # horizontal lines for each y tick
+ax = plt.gca()
+ax.set_axisbelow(True)
+ax.grid(axis="y", alpha=0.5)
+
 plt.tight_layout()
 plt.savefig("fig1.png", dpi=300)
 plt.show()
