@@ -45,7 +45,7 @@ pivot.plot(kind="bar", ax=plt.gca())
 
 plt.xlabel("Instance Type (vCPUs=2)")
 plt.ylabel("Hourly Cost")
-plt.title("Figure 6: Absolute hourly cost by instance type (standard vs spot)")
+plt.title("Figure 6: Absolute hourly cost by provisioning model (standard vs spot)")
 plt.legend(title="Model")
 
 ax = plt.gca()
